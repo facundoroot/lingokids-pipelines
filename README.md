@@ -224,28 +224,44 @@ This group contains the analytics questions:
 
 ### How to Run
 
-#### Option 1: Run the Entire DE Pipeline
+#### Visual Guide: Navigating Asset Groups
 
-1. In the Dagster UI, click on the **search/filter bar** at the top
-2. Type: `group:user_activity_pipeline`
-3. Click **"Materialize all"** button
-4. Watch as Dagster executes the pipeline in dependency order
+##### Option 1: Run the Data Engineering Pipeline
 
-This will:
-- Download and merge files from MinIO → bronze layer
-- Transform raw data → staging views
-- Enrich events → intermediate tables
-- Aggregate metrics → final mart table
+1. Navigate to **Assets** in the Dagster UI
+2. In the **search/filter bar** at the top, type: `group:user_activity_pipeline`
+3. Click **"View lineage"** to see the full asset graph
+4. Click **"Materialize all"** button in the top right
 
-#### Option 2: Run the AE Exercises
+You should see the pipeline execute through the medallion architecture:
+
+![User Activity Pipeline](docs/images/user-activity-pipeline.png)
+
+This pipeline will:
+- Download and merge files from MinIO → bronze layer (Python assets with S3 icons)
+- Transform raw data → staging views (dbt models)
+- Enrich events with user/activity metadata → intermediate tables
+- Aggregate daily metrics → final mart table
+
+##### Option 2: Run the Analytics Exercises
 
 1. In the search/filter bar, type: `group:analytics_exercises`
-2. Click **"Materialize all"**
-3. This will load the seeds and run the analytics queries
+2. Click **"View lineage"** to see the analytics graph
+3. Click **"Materialize all"**
 
-#### Option 3: Run Individual Assets
+You should see the seeds load and the three analytics questions execute:
 
-You can also click on any individual asset in the graph view and click **"Materialize"** to run just that asset and its dependencies.
+![Analytics Exercises](docs/images/analytics-exercises.png)
+
+This will:
+- Load CSV seed data (activities, activity_events, subscriptions)
+- Run Q1: Completion rate by theme
+- Run Q2: Price tier engagement metrics
+- Run Q3: Subscription impact analysis
+
+##### Option 3: Run Individual Assets
+
+You can also click on any individual asset in the graph view and click **"Materialize"** to run just that asset and its upstream dependencies.
 
 ### Monitoring Execution
 
