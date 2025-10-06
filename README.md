@@ -600,379 +600,191 @@ This project was built as part of the Lingokids technical assessment to demonstr
 
 ---
 
-## 🏭 Production Considerations
+## Production Considerations
 
-While this project demonstrates a working local pipeline, moving to production would require several enhancements. Below is a phased approach based on scale, team size, and business requirements.
-
-### Immediate Production Changes (Week 1)
-
-#### 1. Orchestration & Scheduling
-**Current State**: Manual materialization via UI
-**Production Need**: Automated scheduling
-
-- **Dagster Schedules**: Define schedules for different asset groups
-  ```python
-  from dagster import ScheduleDefinition, AssetSelection
-
-  daily_pipeline = ScheduleDefinition(
-      name="daily_user_activity_pipeline",
-      cron_schedule="0 2 * * *",  # 2 AM daily
-      target=AssetSelection.groups("user_activity_pipeline")
-  )
-  ```
-- **Sensors**: Event-driven execution when new files land in S3
-  ```python
-  from dagster import sensor, RunRequest
-
-  @sensor(target=...)
-  def s3_file_sensor(context):
-      # Check for new files in S3, trigger runs
-  ```
-- **Separate SLAs**: Critical metrics run hourly, reports run daily
-
-#### 2. Observability & Monitoring
-**Current State**: Local logs only
-**Production Need**: Centralized monitoring and alerting
-
-- **Logging**:
-  - CloudWatch Logs for centralized log aggregation
-  - Structured logging with JSON format for parsing
-  - DataDog or New Relic for metrics and dashboards
-
-- **Alerting**:
-  - Dagster's built-in Slack/email alerts for failed runs
-  - PagerDuty integration for critical failures
-  - SLA monitoring (alert if pipeline takes >2 hours)
-
-- **Dashboards**:
-  - Dagster asset materialization trends
-  - dbt test failure rates over time
-  - Data freshness metrics
-
-#### 3. Security & Secrets Management
-**Current State**: Hardcoded credentials in docker-compose
-**Production Need**: Secure credential management
-
-- **AWS Secrets Manager** or **Parameter Store** for credentials
-- **IAM Roles** instead of access keys (ECS task roles)
-- **Encryption**: S3 server-side encryption (SSE-S3 or SSE-KMS)
-- **Network Security**: VPC with private subnets, security groups
+While this project demonstrates a working local pipeline, production deployment would require several architectural decisions based on scale and requirements. Below are key considerations organized by priority.
 
 ---
 
-### Short-term Improvements (Month 1-3)
+### Infrastructure & Deployment
 
-#### 4. Infrastructure as Code & CI/CD
+**Container-Based Deployment (ECS/EKS)**
 
-**Repository Structure**:
-```
-lingokids-platform/
-├── dagster-app/           # This repo - pipeline code
-│   ├── src/
-│   ├── dbt/
-│   └── Dockerfile
-└── infrastructure/        # Separate IaC repo
-    ├── terraform/
-    │   ├── modules/
-    │   │   ├── ecs/
-    │   │   ├── s3/
-    │   │   ├── rds/
-    │   │   └── networking/
-    │   └── environments/
-    │       ├── dev/
-    │       ├── staging/
-    │       └── prod/
-    └── README.md
-```
+A production deployment would separate Dagster into three containerized services:
+- **dagster-webserver**: UI and API (port 3000)
+- **dagster-daemon**: Schedules, sensors, and run coordination
+- **dagster-user-code**: Pipeline assets and business logic
 
-**Deployment Architecture (ECS)**:
-```
-┌─────────────────────────────────────────────┐
-│ AWS ECS Cluster                             │
-│                                             │
-│  ┌──────────────────┐  ┌─────────────────┐ │
-│  │ dagster-webserver│  │ dagster-daemon  │ │
-│  │  (Fargate Task)  │  │ (Fargate Task)  │ │
-│  └──────────────────┘  └─────────────────┘ │
-│                                             │
-│  ┌──────────────────┐                      │
-│  │dagster-user-code │                      │
-│  │  (Fargate Task)  │                      │
-│  └──────────────────┘                      │
-└─────────────────────────────────────────────┘
-         │                    │
-         ↓                    ↓
-    ┌────────┐          ┌─────────┐
-    │  RDS   │          │   S3    │
-    │ (Meta) │          │ (Data)  │
-    └────────┘          └─────────┘
-```
+These would run on AWS ECS Fargate or EKS, with:
+- RDS PostgreSQL for Dagster run metadata (multi-AZ for HA)
+- S3 for data storage (raw, bronze, silver, gold layers)
+- VPC with private subnets for security
+- IAM roles for service authentication
 
-**Container Images**:
-- `dagster-webserver`: Serves UI on port 3000
-- `dagster-daemon`: Runs schedules, sensors, run queue
-- `dagster-user-code`: Contains your assets (this repo)
+**CI/CD Pipeline**
 
-**CI/CD Pipeline** (GitHub Actions):
-```yaml
-name: Deploy to Production
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  test:
-    - Run dbt test
-    - Run Python unit tests
-    - Lint SQL (sqlfluff)
-
-  build:
-    - Build Docker images
-    - Tag with git SHA
-    - Push to ECR
-
-  deploy:
-    - Update ECS task definitions via Terraform
-    - Blue/green deployment
-    - Run smoke tests
-```
-
-**Infrastructure Components** (Terraform):
-- **Networking**: VPC, subnets (public/private), NAT gateway, security groups
-- **Compute**: ECS cluster, Fargate task definitions, auto-scaling
-- **Storage**: S3 buckets (raw/bronze/silver/gold), lifecycle policies
-- **Database**: RDS PostgreSQL for Dagster metadata (multi-AZ for HA)
-- **Monitoring**: CloudWatch dashboards, alarms, SNS topics
-- **IAM**: Roles for ECS tasks, S3 access policies
-
-**Environment Strategy**:
-- **Dev**: Smaller instances, single AZ, sample data
-- **Staging**: Production-like, full data, integration tests
-- **Prod**: Multi-AZ, auto-scaling, full backups
-
-#### 5. Data Quality & Governance
-
-**Enhanced Testing**:
-- **Great Expectations** or **Soda** for advanced data quality
-  - Distribution checks (outlier detection)
-  - Schema evolution monitoring
-  - Row count anomaly detection
-
-- **dbt Exposures**: Document downstream BI dashboards
-- **Data Contracts**: Define SLAs between data producers/consumers
-
-**Lineage & Documentation**:
-- Auto-generate data catalogs (dbt docs, DataHub, Atlan)
-- Column-level lineage for impact analysis
-- Business glossary for metric definitions
+A typical deployment workflow would include:
+- GitHub Actions or GitLab CI for automation
+- Automated testing (dbt test, pytest, SQL linting)
+- Docker image builds tagged with git SHA
+- Terraform for infrastructure as code
+- Blue/green deployments to minimize downtime
+- Separate dev/staging/prod environments
 
 ---
 
-### Long-term Considerations (6+ months)
+### Orchestration & Monitoring
 
-#### 6. Data Warehouse Strategy
+**Automated Scheduling**
 
-The choice between DuckDB and cloud warehouses depends on scale:
+Replace manual materialization with:
+- Dagster schedules (e.g., daily at 2 AM for main pipeline)
+- S3 sensors for event-driven execution when new files arrive
+- Different SLAs for critical vs. non-critical assets
 
-**Current Setup (DuckDB)**:
-- ✅ Great for: <100GB data, <5 users, fast iteration
-- ✅ Zero cost for compute
-- ❌ Limited concurrency, single-node bottleneck
+**Observability**
 
-**Option A: Export to Cloud Warehouse**
-```
-DuckDB (transformations) → Parquet → Snowflake/BigQuery
-```
-- **When**: >100GB data, >10 concurrent users
-- **Pro**: Leverage DuckDB speed for complex SQL, use warehouse for serving
-- **Con**: Extra data movement step
+Production systems require:
+- Centralized logging (CloudWatch, DataDog)
+- Alerting for failures (Slack, PagerDuty)
+- Metrics dashboards (pipeline runtime, data freshness, test pass rates)
+- SLA monitoring and automated escalation
 
-**Option B: Full Warehouse Migration**
-```
-S3 (raw data) → dbt in Snowflake/BigQuery → marts
-```
-- **When**: Enterprise scale, large team, need governance features
-- **Pro**: Simpler architecture, built-in concurrency, time travel, sharing
-- **Con**: Higher costs ($), more rigid
+---
 
-**Option C: MotherDuck (Cloud DuckDB)**
-```
-DuckDB API → MotherDuck (managed) → S3
-```
-- **When**: Want DuckDB benefits with cloud scalability
-- **Pro**: Familiar DuckDB syntax, serverless, cheap
-- **Con**: Newer product, smaller ecosystem
+### Data Architecture at Scale
 
-**Decision Criteria**:
-| Factor | Keep DuckDB | Migrate to Warehouse |
-|--------|-------------|----------------------|
+**Small File Problem Solutions**
+
+The current approach (merge files in Dagster) works well for thousands of small files and <100GB/day. At larger scale:
+
+- **AWS Glue** (serverless Spark): Good for unpredictable batch workloads, handles small file compaction automatically
+- **Spark on EMR**: Better for >1TB/day with consistent loads, more control but higher operational overhead
+- **Stream Processing** (Kafka + Flink): For real-time requirements, naturally writes micro-batches to avoid small files
+- **Airbyte/Fivetran**: Managed connectors handle file merging, good for SaaS sources
+
+**Key insight**: Spark adds overhead for small data volumes. Only beneficial when individual files are large (>1GB) OR total volume exceeds 1TB/day. For most use cases, optimized Python (current approach) or DuckDB handles small file merging efficiently.
+
+**DuckDB vs Cloud Warehouse**
+
+Decision factors:
+
+| Metric | DuckDB (Current) | Cloud Warehouse |
+|--------|------------------|-----------------|
 | Data Volume | <500GB | >1TB |
-| Query Users | <10 | >50 |
-| Budget | Minimal | $1k+/month |
-| Team Size | 1-5 | 10+ |
-| Compliance Needs | Low | High (SOC2, HIPAA) |
+| Concurrent Users | <10 | 10-100+ |
+| Query Patterns | Analytical batch | Mixed workloads |
+| Cost | Near zero | $1k-$10k+/month |
+| Operations | Minimal | Managed service |
 
-#### 7. Small File Problem - Scale Solutions
-
-**Current Approach**: Merge in Dagster (Python)
-**Works for**: Thousands of small files, <100GB/day
-
-**At Scale (millions of events/day)**:
-
-**Option A: Stream Processing**
-```
-Events → Kafka/Kinesis → Flink/Spark Streaming → S3 (micro-batches)
-```
-- **When**: Need real-time or sub-hourly updates
-- **Pro**: Low latency, natural deduplication
-- **Con**: Complex infrastructure, higher costs
-
-**Option B: AWS Glue (Serverless Spark)**
-```
-S3 (small files) → Glue Job → S3 (partitioned Parquet)
-```
-- **When**: Daily batch, large volumes, unpredictable load
-- **Pro**: Serverless, auto-scaling, no cluster management
-- **Con**: Cold start delays, less control than EMR
-
-**Option C: Fivetran/Airbyte**
-```
-Data Sources → Managed Connector → Warehouse
-```
-- **When**: Many SaaS sources, want to focus on transformations
-- **Pro**: Pre-built connectors, handles API pagination, retries
-- **Con**: Can be expensive, less customization
-
-**Spark vs Current Approach**:
-- **Use Spark when**: Individual files >1GB AND total >1TB/day
-- **Avoid Spark when**: Files <10MB each (overhead > benefit)
-- **Middle ground**: DuckDB can process 100GB+ efficiently on single node
+**Options**:
+1. **Keep DuckDB + MotherDuck**: Cloud-hosted DuckDB for production, familiar syntax, lower cost
+2. **Hybrid approach**: DuckDB for transformations → export Parquet → Snowflake/BigQuery for serving
+3. **Full warehouse migration**: All transformations in Snowflake/BigQuery, simpler architecture but higher cost
 
 **Partitioning Strategy** (critical at scale):
+Proper partitioning (by date/hour) prevents scanning unnecessary data:
 ```
-s3://bucket/events/
-  └── year=2025/
-      └── month=01/
-          └── day=06/
-              └── hour=14/
-                  └── events.parquet  (100MB-1GB each)
+s3://bucket/events/year=2025/month=01/day=06/hour=14/events.parquet
 ```
 
-#### 8. Alternative Architectures
+---
 
-**Kubernetes (EKS) vs ECS**:
-- **Use EKS when**: >20 microservices, multi-cloud, need advanced orchestration
-- **Use ECS when**: AWS-only, simpler setup, smaller team
-- **Dagster Cloud**: Skip infrastructure entirely, managed service ($)
+### Data Quality & Governance
 
-**Dagster Deployment Options**:
-| Option | Complexity | Cost | Scale |
-|--------|------------|------|-------|
-| Local (current) | Low | $0 | Dev only |
-| ECS Fargate | Medium | $$$ | 100s of assets |
-| EKS | High | $$ | 1000s of assets |
-| Dagster Cloud | Low | $$$$ | Any scale |
+**Enhanced Testing**
+- Great Expectations or Soda for advanced checks (distribution anomalies, schema drift)
+- Data contracts between teams defining schemas and SLAs
+- Automated data profiling and documentation
+
+**Lineage & Catalogs**
+- dbt docs for transformation lineage
+- DataHub or Atlan for enterprise-wide data catalogs
+- Column-level lineage for impact analysis
 
 ---
 
-### Cost Optimization Strategies
+### Security & Compliance
 
-1. **Compute**:
-   - Use Spot instances for non-critical jobs (70% cheaper)
-   - Right-size ECS tasks (don't over-provision)
-   - Schedule non-urgent jobs during off-peak hours
-
-2. **Storage**:
-   - S3 lifecycle policies: Standard → Infrequent Access → Glacier
-   - Compress files (Parquet with Snappy)
-   - Delete temporary/staging data after 7 days
-
-3. **Warehouse**:
-   - Use clustering keys (Snowflake) or partitioning (BigQuery)
-   - Materialize frequently-queried aggregations
-   - Set query timeouts to prevent runaway costs
-   - Monitor with cost dashboards
-
-4. **Monitoring**:
-   - AWS Cost Explorer with daily alerts
-   - Tag all resources for cost allocation
-   - Set budgets with automatic alerts
+Production systems need:
+- AWS Secrets Manager for credentials (no hardcoded values)
+- S3 encryption at rest (SSE-KMS)
+- Network isolation (VPC, security groups)
+- Audit logging for compliance
+- Role-based access control (RBAC)
 
 ---
 
-### Disaster Recovery & Business Continuity
+### Cost Optimization
 
-1. **Backup Strategy**:
-   - **S3 raw data**: Cross-region replication (critical data)
-   - **RDS metadata**: Automated daily snapshots, 30-day retention
-   - **Code**: Git (already versioned)
-   - **Infrastructure**: Terraform state in S3 with versioning
-
-2. **Recovery Procedures**:
-   - **RTO (Recovery Time Objective)**: 4 hours to restore service
-   - **RPO (Recovery Point Objective)**: <24 hours of data loss
-   - **Runbook**: Documented steps in Confluence/Notion
-   - **DR Drills**: Quarterly test restores
-
-3. **High Availability**:
-   - Multi-AZ RDS deployment
-   - ECS tasks spread across availability zones
-   - S3 (99.999999999% durability by default)
+Key strategies:
+- Spot instances for non-critical batch jobs (70% savings)
+- S3 lifecycle policies (move old data to Glacier)
+- Right-size compute resources (monitor and adjust)
+- Partition pruning in queries
+- Schedule heavy workloads during off-peak hours
+- Cost tagging and monitoring with AWS Cost Explorer
 
 ---
 
-### Scalability Roadmap
+### Disaster Recovery
 
-**Phase 1: Current → 10x Scale**
-- Same architecture, just tune configurations
-- Add horizontal scaling for user-code containers
-- Optimize dbt models (incremental, partitioning)
+Essential components:
+- S3 cross-region replication for critical raw data
+- RDS automated snapshots (30-day retention)
+- Infrastructure as Code (Terraform state in S3)
+- Documented runbooks for recovery procedures
+- RTO: 4 hours, RPO: <24 hours
 
-**Phase 2: 10x → 100x Scale**
-- Migrate to cloud warehouse (Snowflake/BigQuery)
+---
+
+### Scalability Considerations
+
+**Phase 1 (10x current scale)**:
+- Horizontal scaling of Dagster user-code containers
+- Optimize dbt incremental strategies
+- Add caching layers where appropriate
+
+**Phase 2 (100x scale)**:
+- Migrate to cloud warehouse for serving layer
 - Implement stream processing for hot path
 - Consider data lakehouse (Delta Lake, Iceberg)
 
-**Phase 3: 100x+ Scale**
+**Phase 3 (Enterprise scale)**:
 - Multi-region deployment
 - Dedicated data platform team
 - Real-time + batch lambda architecture
-
-**Key Metrics to Monitor**:
-- Pipeline runtime (alert if >2x baseline)
-- Data freshness (SLAs per table)
-- Error rates (failed tests, runs)
-- Cost per GB processed
 
 ---
 
 ### Technology Selection Framework
 
-When evaluating production changes, consider:
+The right architecture depends on constraints, not just capabilities:
 
-1. **Data Volume**:
-   - <100GB/day → Current setup scales fine
-   - 100GB-1TB/day → Add warehouse or MotherDuck
-   - >1TB/day → Distributed compute (Spark) + warehouse
+**Data Volume**:
+- <100GB/day: Current setup (DuckDB + Dagster)
+- 100GB-1TB/day: Add MotherDuck or warehouse
+- >1TB/day: Distributed processing + warehouse
 
-2. **Latency Requirements**:
-   - Daily updates → Batch (current approach)
-   - Hourly updates → Optimized batch + incremental
-   - Minutes/real-time → Stream processing (Kafka + Flink)
+**Latency Requirements**:
+- Daily batch: Current approach
+- Hourly updates: Optimized incremental models
+- Real-time: Stream processing (Kafka + Flink)
 
-3. **Team Size**:
-   - 1-5 people → Keep simple, minimize ops overhead
-   - 5-20 people → Invest in platform, separate dev/prod
-   - 20+ people → Data platform team, multi-tenant
+**Team Size**:
+- 1-5 engineers: Minimize operational overhead, simple stack
+- 5-20 engineers: Invest in platform, CI/CD, observability
+- 20+ engineers: Dedicated platform team, multi-tenant architecture
 
-4. **Budget**:
-   - <$1k/month → DuckDB + ECS
-   - $1k-$10k/month → Cloud warehouse + managed services
-   - $10k+/month → Enterprise warehouse + real-time
-
-**The right architecture balances cost, complexity, and capabilities based on actual constraints - not just what's technically possible.**
+**Budget**:
+- <$1k/month: DuckDB + ECS
+- $1k-$10k/month: Cloud warehouse + managed services
+- $10k+/month: Enterprise warehouse + real-time processing
 
 ---
 
-Thank you for reviewing! 🚀
+These considerations provide a starting point for production architecture discussions. The actual implementation would be tailored to specific business requirements, data volumes, team capabilities, and budget constraints.
+
+---
+
+Thank you for reviewing!
