@@ -700,3 +700,5 @@ The right production architecture depends on actual constraints: data characteri
 ---
 
 Thank you for reviewing!
+
+P.S. I tried spinning up Kafka locally for a streaming example but ran out of time 😅
