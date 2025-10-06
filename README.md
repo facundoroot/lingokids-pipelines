@@ -602,188 +602,100 @@ This project was built as part of the Lingokids technical assessment to demonstr
 
 ## Production Considerations
 
-While this project demonstrates a working local pipeline, production deployment would require several architectural decisions based on scale and requirements. Below are key considerations organized by priority.
+### What This Project Demonstrates
+
+This local setup simulates a production-like data pipeline with:
+- **MinIO as S3**: Cloud object storage patterns
+- **Bronze layer merging**: Solves the "small file problem" by consolidating many tiny files into fewer, larger files
+- **Medallion architecture**: Progressive refinement from raw → cleaned → aggregated data
+- **Incremental processing**: Only process new/changed data on subsequent runs
+- **Data quality testing**: Validate data at every layer
+
+The key design choice here is **single-node processing** (Python + DuckDB) for simplicity and cost efficiency at small-to-medium scale.
 
 ---
 
-### Infrastructure & Deployment
+### Production Architecture Trade-offs
 
-**Container-Based Deployment (ECS/EKS)**
+The main decision is: **when does distributed processing (Spark/Databricks) make sense vs. single-node (current approach)?**
 
-A production deployment would separate Dagster into three containerized services:
-- **dagster-webserver**: UI and API (port 3000)
-- **dagster-daemon**: Schedules, sensors, and run coordination
-- **dagster-user-code**: Pipeline assets and business logic
+#### Current Approach: Python + DuckDB
+**Best for:**
+- Small to medium data volumes
+- Team wants fast iteration and low operational overhead
+- Budget-conscious projects
+- Analytical workloads with modest concurrency
 
-These would run on AWS ECS Fargate or EKS, with:
-- RDS PostgreSQL for Dagster run metadata (multi-AZ for HA)
-- S3 for data storage (raw, bronze, silver, gold layers)
-- VPC with private subnets for security
-- IAM roles for service authentication
+**Limitations:**
+- Single-node memory/CPU constraints
+- Limited concurrent query users
+- No automatic scaling for traffic spikes
 
-**CI/CD Pipeline**
+#### Spark/Databricks/Glue
+**Best for:**
+- Large data volumes requiring distributed compute
+- High file counts where metadata operations become bottleneck
+- Teams already invested in Spark ecosystem
+- Need for both batch and streaming in same platform
 
-A typical deployment workflow would include:
-- GitHub Actions or GitLab CI for automation
-- Automated testing (dbt test, pytest, SQL linting)
-- Docker image builds tagged with git SHA
-- Terraform for infrastructure as code
-- Blue/green deployments to minimize downtime
-- Separate dev/staging/prod environments
-
----
-
-### Orchestration & Monitoring
-
-**Automated Scheduling**
-
-Replace manual materialization with:
-- Dagster schedules (e.g., daily at 2 AM for main pipeline)
-- S3 sensors for event-driven execution when new files arrive
-- Different SLAs for critical vs. non-critical assets
-
-**Observability**
-
-Production systems require:
-- Centralized logging (CloudWatch, DataDog)
-- Alerting for failures (Slack, PagerDuty)
-- Metrics dashboards (pipeline runtime, data freshness, test pass rates)
-- SLA monitoring and automated escalation
+**Limitations:**
+- Higher operational complexity (cluster management, tuning)
+- Cost overhead (especially for small workloads)
+- Slower for small datasets due to coordination overhead
+- Steeper learning curve
 
 ---
 
-### Data Architecture at Scale
+### When to Choose What
 
-**Small File Problem Solutions**
+**Stick with single-node (Python/DuckDB):**
+- Data volume fits in memory or can be processed in chunks
+- File count is high but individual files are tiny
+- Batch processing (daily/hourly) is sufficient
+- Small team prioritizing velocity over scale
 
-The current approach (merge files in Dagster) works well for thousands of small files and <100GB/day. At larger scale:
+**Move to Spark/Databricks:**
+- Data volume requires horizontal scaling
+- File sizes are individually large AND numerous
+- Need sub-hour latency or streaming capabilities
+- Organization already has Spark expertise and infrastructure
 
-- **AWS Glue** (serverless Spark): Good for unpredictable batch workloads, handles small file compaction automatically
-- **Spark on EMR**: Better for >1TB/day with consistent loads, more control but higher operational overhead
-- **Stream Processing** (Kafka + Flink): For real-time requirements, naturally writes micro-batches to avoid small files
-- **Airbyte/Fivetran**: Managed connectors handle file merging, good for SaaS sources
-
-**Key insight**: Spark adds overhead for small data volumes. Only beneficial when individual files are large (>1GB) OR total volume exceeds 1TB/day. For most use cases, optimized Python (current approach) or DuckDB handles small file merging efficiently.
-
-**DuckDB vs Cloud Warehouse**
-
-Decision factors:
-
-| Metric | DuckDB (Current) | Cloud Warehouse |
-|--------|------------------|-----------------|
-| Data Volume | <500GB | >1TB |
-| Concurrent Users | <10 | 10-100+ |
-| Query Patterns | Analytical batch | Mixed workloads |
-| Cost | Near zero | $1k-$10k+/month |
-| Operations | Minimal | Managed service |
-
-**Options**:
-1. **Keep DuckDB + MotherDuck**: Cloud-hosted DuckDB for production, familiar syntax, lower cost
-2. **Hybrid approach**: DuckDB for transformations → export Parquet → Snowflake/BigQuery for serving
-3. **Full warehouse migration**: All transformations in Snowflake/BigQuery, simpler architecture but higher cost
-
-**Partitioning Strategy** (critical at scale):
-Proper partitioning (by date/hour) prevents scanning unnecessary data:
-```
-s3://bucket/events/year=2025/month=01/day=06/hour=14/events.parquet
-```
+**Middle ground (Glue):**
+- Need Spark occasionally but don't want to manage clusters
+- Unpredictable workload patterns
+- Want serverless auto-scaling
 
 ---
 
-### Data Quality & Governance
+### Other Production Needs
 
-**Enhanced Testing**
-- Great Expectations or Soda for advanced checks (distribution anomalies, schema drift)
-- Data contracts between teams defining schemas and SLAs
-- Automated data profiling and documentation
+Beyond the processing engine choice:
 
-**Lineage & Catalogs**
-- dbt docs for transformation lineage
-- DataHub or Atlan for enterprise-wide data catalogs
-- Column-level lineage for impact analysis
+**Infrastructure:**
+- Containerize Dagster components (webserver, daemon, user-code)
+- Use managed databases for metadata (RDS)
+- Implement secrets management (AWS Secrets Manager)
+- Set up CI/CD with automated testing
 
----
+**Observability:**
+- Centralized logging and alerting
+- SLA monitoring for data freshness
+- Cost tracking and budget alerts
 
-### Security & Compliance
+**Data Quality:**
+- Expand testing beyond dbt (Great Expectations, Soda)
+- Define data contracts between teams
+- Implement data catalogs for discovery
 
-Production systems need:
-- AWS Secrets Manager for credentials (no hardcoded values)
-- S3 encryption at rest (SSE-KMS)
-- Network isolation (VPC, security groups)
-- Audit logging for compliance
-- Role-based access control (RBAC)
-
----
-
-### Cost Optimization
-
-Key strategies:
-- Spot instances for non-critical batch jobs (70% savings)
-- S3 lifecycle policies (move old data to Glacier)
-- Right-size compute resources (monitor and adjust)
-- Partition pruning in queries
-- Schedule heavy workloads during off-peak hours
-- Cost tagging and monitoring with AWS Cost Explorer
+**Optimization:**
+- Proper partitioning strategies (by date/region)
+- Incremental processing patterns
+- Compression (Parquet with appropriate codecs)
+- Query result caching where applicable
 
 ---
 
-### Disaster Recovery
-
-Essential components:
-- S3 cross-region replication for critical raw data
-- RDS automated snapshots (30-day retention)
-- Infrastructure as Code (Terraform state in S3)
-- Documented runbooks for recovery procedures
-- RTO: 4 hours, RPO: <24 hours
-
----
-
-### Scalability Considerations
-
-**Phase 1 (10x current scale)**:
-- Horizontal scaling of Dagster user-code containers
-- Optimize dbt incremental strategies
-- Add caching layers where appropriate
-
-**Phase 2 (100x scale)**:
-- Migrate to cloud warehouse for serving layer
-- Implement stream processing for hot path
-- Consider data lakehouse (Delta Lake, Iceberg)
-
-**Phase 3 (Enterprise scale)**:
-- Multi-region deployment
-- Dedicated data platform team
-- Real-time + batch lambda architecture
-
----
-
-### Technology Selection Framework
-
-The right architecture depends on constraints, not just capabilities:
-
-**Data Volume**:
-- <100GB/day: Current setup (DuckDB + Dagster)
-- 100GB-1TB/day: Add MotherDuck or warehouse
-- >1TB/day: Distributed processing + warehouse
-
-**Latency Requirements**:
-- Daily batch: Current approach
-- Hourly updates: Optimized incremental models
-- Real-time: Stream processing (Kafka + Flink)
-
-**Team Size**:
-- 1-5 engineers: Minimize operational overhead, simple stack
-- 5-20 engineers: Invest in platform, CI/CD, observability
-- 20+ engineers: Dedicated platform team, multi-tenant architecture
-
-**Budget**:
-- <$1k/month: DuckDB + ECS
-- $1k-$10k/month: Cloud warehouse + managed services
-- $10k+/month: Enterprise warehouse + real-time processing
-
----
-
-These considerations provide a starting point for production architecture discussions. The actual implementation would be tailored to specific business requirements, data volumes, team capabilities, and budget constraints.
+The right production architecture depends on actual constraints: data characteristics, team capabilities, latency requirements, and budget. This project demonstrates solid fundamentals that scale gracefully—you can start here and evolve toward distributed systems only when the data demands it.
 
 ---
 
