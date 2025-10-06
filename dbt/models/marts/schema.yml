@@ -1,0 +1,63 @@
+version: 2
+
+models:
+  - name: activity_engagement_metrics
+    description: >
+      Final Gold-layer model aggregating engagement KPIs by date, country, OS, app version,
+      subscription status, and activity type. It summarizes user activity events with metrics
+      such as number of activities played, total time spent, and completion rate.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - date
+            - country_code
+            - os_name
+            - app_version
+            - subscription_status
+            - activity_type
+
+    columns:
+      - name: date
+        description: The date of the activity event (derived from occurred_at).
+        tests:
+          - not_null
+
+      - name: country_code
+        description: ISO country code for the user's location.
+        tests:
+          - not_null
+
+      - name: os_name
+        description: Name of the operating system on the device (e.g. iOS, Android).
+
+      - name: app_version
+        description: Version of the Lingokids app used by the user.
+
+      - name: subscription_status
+        description: >
+          Subscription state of the user at the time of the event:
+          'free', 'trial', 'subscribed', or 'lapsed'.
+
+      - name: activity_type
+        description: Broad type of the activity (e.g. game, video, song).
+
+      - name: activities_played
+        description: Number of activity_exit events counted for the given grouping.
+        tests:
+          - not_null
+
+      - name: total_time_spent
+        description: Total time in seconds users spent in activities for the given grouping.
+        tests:
+          - not_null
+
+      - name: completion_rate
+        description: >
+          Fraction of completed activities in the given grouping,
+          calculated as completed_plays / total_plays.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1

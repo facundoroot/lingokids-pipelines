@@ -1,0 +1,7 @@
+lingokids_profile:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: warehouse/lingokids.duckdb
+      threads: 4

@@ -1,0 +1,25 @@
+version: 2
+
+sources:
+  - name: bronze
+    description: >
+      Bronze layer datasets created by Dagster assets.
+      These are merged files from MinIO raw buckets.
+    tables:
+      - name: bronze_events
+        description: Merged event data from raw-events bucket
+        meta:
+          dagster:
+            asset_key: ["bronze", "bronze_events"]
+
+      - name: bronze_users
+        description: Merged user data from raw-users bucket
+        meta:
+          dagster:
+            asset_key: ["bronze", "bronze_users"]
+
+      - name: bronze_activities
+        description: Merged activity data from raw-activities bucket
+        meta:
+          dagster:
+            asset_key: ["bronze", "bronze_activities"]

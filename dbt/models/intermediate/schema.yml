@@ -1,0 +1,19 @@
+version: 2
+
+models:
+  - name: intermediate_activity_events_enriched
+    description: >
+      Enriched event-level table joining users, activities, and event context.
+      Adds subscription_status and date fields for downstream aggregations.
+    columns:
+      - name: event_id
+        tests:
+          - not_null
+          - unique
+      - name: user_id
+        tests:
+          - not_null
+      - name: activity_id
+      - name: subscription_status
+      - name: date
+

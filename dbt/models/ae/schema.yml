@@ -1,0 +1,33 @@
+version: 2
+
+models:
+  - name: q1_completion_rate
+    description: "Completion rate per theme."
+    columns:
+      - name: theme
+        tests: [not_null]
+      - name: completion_rate_pct
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+
+  - name: q2_price_tier_engagement
+    description: "Average session duration and count by price tier."
+    columns:
+      - name: price_tier
+        tests: [not_null]
+      - name: session_count
+        tests: [not_null]
+      - name: avg_duration_seconds
+        tests: [not_null]
+
+  - name: q3_subscription_impact
+    description: "Average activities completed before and after subscription, grouped by platform."
+    columns:
+      - name: platform
+        tests: [not_null]
+      - name: avg_completed_before
+      - name: avg_completed_after
+

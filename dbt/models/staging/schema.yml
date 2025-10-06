@@ -1,0 +1,64 @@
+version: 2
+
+models:
+  - name: stg_events
+    description: >
+      Staging model for activity_exit events. Reads directly from the events.json file,
+      flattens the nested data and context fields, and filters only activity_exit events.
+    columns:
+      - name: event_id
+        description: Unique identifier for the event.
+        tests:
+          - not_null
+          - unique
+      - name: user_id
+        description: ID of the user who triggered the event.
+        tests:
+          - not_null
+      - name: occurred_at
+        description: Timestamp of when the event happened.
+        tests:
+          - not_null
+      - name: activity_id
+        description: Identifier of the activity.
+      - name: duration_seconds
+        description: Duration of the activity in seconds.
+      - name: completed_flag
+        description: Whether the activity was completed.
+
+  - name: stg_users
+    description: >
+      Staging model for users and their subscription timelines.
+      Each row corresponds to one user with registration and subscription periods.
+    columns:
+      - name: user_id
+        tests:
+          - not_null
+          - unique
+      - name: country_code
+        description: ISO country code for the user.
+      - name: registration_at
+        description: Registration timestamp.
+      - name: subscription_start_at
+        description: Subscription start date.
+      - name: subscription_expire_at
+        description: Subscription expiry date.
+
+  - name: stg_activities
+    description: >
+      Staging model for activities metadata. Contains the name, type,
+      subtype, and collection grouping of each activity.
+    columns:
+      - name: activity_id
+        tests:
+          - not_null
+          - unique
+      - name: activity_name
+        description: The activity's display name.
+      - name: activity_type
+        description: Broad type of activity (e.g., game, video).
+      - name: activity_subtype
+        description: Subcategory of the activity type.
+      - name: collection
+        description: Collection or theme the activity belongs to.
+

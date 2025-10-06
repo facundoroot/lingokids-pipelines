@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: lingokids-minio
+    ports:
+      - "9000:9000"  # API
+      - "9001:9001"  # Console UI
+    environment:
+      MINIO_ROOT_USER: lingokidsadmin
+      MINIO_ROOT_PASSWORD: lingokidsadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - lingokids-network
+
+  # Create buckets and upload data on startup
+  minio-init:
+    build:
+      context: .
+      dockerfile: Dockerfile.minio-init
+    container_name: lingokids-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ENDPOINT: "minio:9000"
+    networks:
+      - lingokids-network
+
+volumes:
+  minio-data:
+
+networks:
+  lingokids-network:
+    driver: bridge

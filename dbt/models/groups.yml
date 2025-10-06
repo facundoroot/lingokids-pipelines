@@ -1,0 +1,9 @@
+version: 2
+
+groups:
+  - name: user_activity_pipeline
+    owner:
+      name: Data Engineering Team
+  - name: analytics_exercises
+    owner:
+      name: Analytics Engineering Team

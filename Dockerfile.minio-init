@@ -1,0 +1,24 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install minio Python client and mc CLI
+RUN apt-get update && apt-get install -y curl && \
+    pip install --no-cache-dir minio && \
+    curl -o /usr/local/bin/mc https://dl.min.io/client/mc/release/linux-amd64/mc && \
+    chmod +x /usr/local/bin/mc && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Copy initialization script and data
+COPY scripts/init_minio.py /app/
+COPY dbt/data/*.json /app/data/
+
+# First create buckets with mc, then upload files with Python
+CMD /bin/sh -c "\
+    mc alias set myminio http://minio:9000 minioadmin minioadmin && \
+    mc mb --ignore-existing myminio/raw-events && \
+    mc mb --ignore-existing myminio/raw-users && \
+    mc mb --ignore-existing myminio/raw-activities && \
+    mc mb --ignore-existing myminio/bronze && \
+    echo 'Buckets created. Uploading files...' && \
+    python init_minio.py"
