@@ -100,8 +100,8 @@ Follow these steps to set up and run the pipeline:
 
 ### Step 1: Clone the Repository
 ```bash
-git clone <repository-url>
-cd lingokids
+git clone https://github.com/facundoroot/lingokids-pipelines.git
+cd lingokids-pipelines
 ```
 
 ### Step 2: Start MinIO (S3 Storage)
@@ -155,13 +155,15 @@ You should see `(.venv)` in your terminal prompt.
 
 ### Step 5: Install dbt Dependencies
 
-dbt uses external packages (like `dbt-utils` for additional test macros):
+The project uses `dbt-utils` for additional test macros. Install the required dbt packages:
 
 ```bash
 cd dbt
 dbt deps
 cd ..
 ```
+
+This will download `dbt-utils` to `dbt/dbt_packages/` (required for Dagster to parse the project).
 
 ### Step 6: Start Dagster
 
