@@ -586,17 +586,17 @@ dbt test --select failing_model --store-failures
 
 ---
 
-## 🎓 Assessment Notes
+## Assessment Notes
 
 This project was built as part of the Lingokids technical assessment to demonstrate:
 
-- ✅ Modern data stack proficiency (Dagster, dbt, DuckDB)
-- ✅ ETL/ELT pipeline design and implementation
-- ✅ Data quality testing and validation
-- ✅ Incremental processing strategies
-- ✅ SQL and Python skills
-- ✅ Documentation and code organization
-- ✅ Reproducible development environments
+- Modern data stack proficiency (Dagster, dbt, DuckDB)
+- ETL/ELT pipeline design and implementation
+- Data quality testing and validation
+- Incremental processing strategies
+- SQL and Python skills
+- Documentation and code organization
+- Reproducible development environments
 
 ---
 
