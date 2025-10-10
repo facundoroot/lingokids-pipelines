@@ -3,9 +3,9 @@ version: 2
 models:
   - name: activity_engagement_metrics
     description: >
-      Final Gold-layer model aggregating engagement KPIs by date, country, OS, app version,
-      subscription status, and activity type. It summarizes user activity events with metrics
-      such as number of activities played, total time spent, and completion rate.
+      Final Gold-layer model aggregating engagement KPIs by date, country, OS (name + version),
+      app version, subscription status, activity type, and collection. It summarizes user activity
+      events with metrics such as number of activities played, total time spent, and completion rate.
 
     tests:
       - dbt_utils.unique_combination_of_columns:
@@ -13,9 +13,11 @@ models:
             - date
             - country_code
             - os_name
+            - os_version
             - app_version
             - subscription_status
             - activity_type
+            - collection_id
 
     columns:
       - name: date
@@ -31,6 +33,9 @@ models:
       - name: os_name
         description: Name of the operating system on the device (e.g. iOS, Android).
 
+      - name: os_version
+        description: Version of the operating system (e.g. 14.2, 11.0).
+
       - name: app_version
         description: Version of the Lingokids app used by the user.
 
@@ -41,6 +46,9 @@ models:
 
       - name: activity_type
         description: Broad type of the activity (e.g. game, video, song).
+
+      - name: collection_id
+        description: The collection this activity belongs to.
 
       - name: activities_played
         description: Number of activity_exit events counted for the given grouping.

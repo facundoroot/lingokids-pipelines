@@ -23,6 +23,7 @@ SELECT
     -- Flatten nested context
     context->'device'->>'brand' AS device_name,
     context->'os'->>'name' AS os_name,
+    context->'os'->>'version' AS os_version,
     context->'app'->>'version' AS app_version,
 
     name AS event_name

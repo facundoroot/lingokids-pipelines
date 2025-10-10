@@ -327,10 +327,186 @@ SELECT COUNT(*) FROM main.activity_engagement_metrics;
 
 ### Example Queries
 
-You can run queries just like you would with any other SQL database. For example, to view the aggregated engagement metrics:
+The `activity_engagement_metrics` mart table aggregates all the key engagement metrics by multiple dimensions. Here are queries to extract the metrics at different granularities:
+
+#### 📊 Number of Activities Played
 
 ```sql
-SELECT * FROM main.activity_engagement_metrics LIMIT 10;
+-- Daily (already at daily grain)
+SELECT date, SUM(activities_played) AS total_activities
+FROM main.activity_engagement_metrics
+GROUP BY date
+ORDER BY date DESC;
+
+-- Weekly
+SELECT DATE_TRUNC('week', date) AS week, SUM(activities_played) AS total_activities
+FROM main.activity_engagement_metrics
+GROUP BY week
+ORDER BY week DESC;
+
+-- Monthly
+SELECT DATE_TRUNC('month', date) AS month, SUM(activities_played) AS total_activities
+FROM main.activity_engagement_metrics
+GROUP BY month
+ORDER BY month DESC;
+
+-- Yearly
+SELECT DATE_TRUNC('year', date) AS year, SUM(activities_played) AS total_activities
+FROM main.activity_engagement_metrics
+GROUP BY year
+ORDER BY year DESC;
+```
+
+#### ⏱️ Time Spent Playing
+
+```sql
+-- Daily total time spent (in hours)
+SELECT date, ROUND(SUM(total_time_spent) / 3600, 2) AS total_hours
+FROM main.activity_engagement_metrics
+GROUP BY date
+ORDER BY date DESC;
+
+-- Weekly total time spent
+SELECT DATE_TRUNC('week', date) AS week, ROUND(SUM(total_time_spent) / 3600, 2) AS total_hours
+FROM main.activity_engagement_metrics
+GROUP BY week
+ORDER BY week DESC;
+
+-- Monthly total time spent
+SELECT DATE_TRUNC('month', date) AS month, ROUND(SUM(total_time_spent) / 3600, 2) AS total_hours
+FROM main.activity_engagement_metrics
+GROUP BY month
+ORDER BY month DESC;
+
+-- Average time per activity (in minutes)
+SELECT
+    DATE_TRUNC('month', date) AS month,
+    ROUND(SUM(total_time_spent) / NULLIF(SUM(activities_played), 0) / 60, 2) AS avg_minutes_per_activity
+FROM main.activity_engagement_metrics
+GROUP BY month
+ORDER BY month DESC;
+```
+
+#### 🏆 Most Played Activities
+
+```sql
+-- By number of times played
+SELECT
+    activity_type,
+    collection_id,
+    SUM(activities_played) AS total_plays
+FROM main.activity_engagement_metrics
+GROUP BY activity_type, collection_id
+ORDER BY total_plays DESC
+LIMIT 20;
+
+-- By total duration (in hours)
+SELECT
+    activity_type,
+    collection_id,
+    ROUND(SUM(total_time_spent) / 3600, 2) AS total_hours
+FROM main.activity_engagement_metrics
+GROUP BY activity_type, collection_id
+ORDER BY total_hours DESC
+LIMIT 20;
+
+-- Most played activities in the last 30 days
+SELECT
+    activity_type,
+    collection_id,
+    SUM(activities_played) AS total_plays,
+    ROUND(SUM(total_time_spent) / 3600, 2) AS total_hours
+FROM main.activity_engagement_metrics
+WHERE date >= CURRENT_DATE - INTERVAL '30 days'
+GROUP BY activity_type, collection_id
+ORDER BY total_plays DESC
+LIMIT 20;
+```
+
+#### ✅ Completion Rate
+
+```sql
+-- Overall completion rate by activity type
+SELECT
+    activity_type,
+    ROUND(SUM(activities_played * completion_rate) / NULLIF(SUM(activities_played), 0), 3) AS weighted_completion_rate,
+    SUM(activities_played) AS total_plays
+FROM main.activity_engagement_metrics
+GROUP BY activity_type
+ORDER BY weighted_completion_rate DESC;
+
+-- Completion rate trend over time (monthly)
+SELECT
+    DATE_TRUNC('month', date) AS month,
+    ROUND(SUM(activities_played * completion_rate) / NULLIF(SUM(activities_played), 0), 3) AS weighted_completion_rate
+FROM main.activity_engagement_metrics
+GROUP BY month
+ORDER BY month DESC;
+
+-- Completion rate by subscription status
+SELECT
+    subscription_status,
+    ROUND(SUM(activities_played * completion_rate) / NULLIF(SUM(activities_played), 0), 3) AS weighted_completion_rate,
+    SUM(activities_played) AS total_plays
+FROM main.activity_engagement_metrics
+GROUP BY subscription_status
+ORDER BY weighted_completion_rate DESC;
+```
+
+#### 🔍 Multi-Dimensional Analysis
+
+```sql
+-- Slice by country and subscription status
+SELECT
+    country_code,
+    subscription_status,
+    SUM(activities_played) AS total_plays,
+    ROUND(SUM(total_time_spent) / 3600, 2) AS total_hours,
+    ROUND(SUM(activities_played * completion_rate) / NULLIF(SUM(activities_played), 0), 3) AS completion_rate
+FROM main.activity_engagement_metrics
+WHERE date >= CURRENT_DATE - INTERVAL '30 days'
+GROUP BY country_code, subscription_status
+ORDER BY total_plays DESC;
+
+-- Slice by OS type and version
+SELECT
+    os_name,
+    os_version,
+    SUM(activities_played) AS total_plays,
+    ROUND(SUM(total_time_spent) / 3600, 2) AS total_hours
+FROM main.activity_engagement_metrics
+WHERE date >= CURRENT_DATE - INTERVAL '7 days'
+GROUP BY os_name, os_version
+ORDER BY total_plays DESC;
+
+-- Slice by app version and activity type
+SELECT
+    app_version,
+    activity_type,
+    SUM(activities_played) AS total_plays,
+    ROUND(SUM(activities_played * completion_rate) / NULLIF(SUM(activities_played), 0), 3) AS completion_rate
+FROM main.activity_engagement_metrics
+WHERE date >= CURRENT_DATE - INTERVAL '30 days'
+GROUP BY app_version, activity_type
+ORDER BY total_plays DESC;
+
+-- Full dimensional breakdown (top combinations)
+SELECT
+    date,
+    country_code,
+    os_name,
+    os_version,
+    app_version,
+    subscription_status,
+    activity_type,
+    collection_id,
+    activities_played,
+    ROUND(total_time_spent / 60, 2) AS time_spent_minutes,
+    completion_rate
+FROM main.activity_engagement_metrics
+WHERE date >= CURRENT_DATE - INTERVAL '7 days'
+ORDER BY activities_played DESC
+LIMIT 50;
 ```
 
 To see the analytics exercise results:
