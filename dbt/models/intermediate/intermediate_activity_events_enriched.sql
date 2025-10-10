@@ -47,8 +47,8 @@ joined AS (
         u.country_code,
 
         CASE
-            WHEN e.occurred_at BETWEEN u.trial_start_at AND u.trial_end_at THEN 'trial'
             WHEN e.occurred_at BETWEEN u.subscription_start_at AND u.subscription_expire_at THEN 'subscribed'
+            WHEN e.occurred_at BETWEEN u.trial_start_at AND u.trial_end_at THEN 'trial'
             WHEN e.occurred_at < u.trial_start_at THEN 'free'
             ELSE 'lapsed'
         END AS subscription_status
